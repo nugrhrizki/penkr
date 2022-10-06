@@ -139,6 +139,9 @@ const CreateTable: Component = () => {
                   class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:(ring-blue-500 border-blue-500) block p-2 placeholder-gray-400 outline-none"
                   required
                 >
+                  <option value="" selected disabled>
+                    [Choose One]
+                  </option>
                   <option value="text">Text</option>
                   <option value="int">Int</option>
                   <option value="bool">Bool</option>
