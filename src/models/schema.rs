@@ -1,21 +1,19 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
-#[derive(Deserialize)]
-pub struct CreateTable {
+#[derive(Serialize, Deserialize, FromRow)]
+pub struct Table {
     pub name: String,
-    #[serde(default = "default_primary_key")]
-    pub primary_key: String,
-    pub fields: Vec<Field>,
 }
 
-fn default_primary_key() -> String {
-    "id".to_string()
-}
-
-#[derive(Deserialize)]
-pub struct Field {
+#[derive(Serialize, Deserialize, FromRow)]
+pub struct Column {
     pub name: String,
-    pub r#type: String,
-    pub unique: bool,
-    pub required: bool,
+    pub data_type: String,
+    pub is_nullable: String,
+    // pub is_primary_key: bool,
+    // pub is_unique: bool,
+    // pub is_auto_increment: bool,
+    pub maximum_length: Option<i32>,
+    pub default_value: Option<String>,
 }
