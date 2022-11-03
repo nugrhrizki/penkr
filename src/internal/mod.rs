@@ -13,6 +13,7 @@ pub fn init_routes(cfg: &mut web::ServiceConfig) {
             .service(db::introspect)
             .service(db::connect)
             .service(db::disconnect)
+            .service(db::select)
             .service(db::reconnect),
     );
     cfg.service(

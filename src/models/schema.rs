@@ -7,7 +7,7 @@ pub struct Table {
 }
 
 #[derive(Serialize, Deserialize, FromRow)]
-pub struct Column {
+pub struct VColumn {
     pub name: String,
     pub data_type: String,
     pub is_nullable: String,

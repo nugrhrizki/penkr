@@ -22,7 +22,11 @@ async fn index(state: web::Data<AppState>) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let sqlite_pool = get_sqlite_pool(5, "sqlite://data.db").await;
+    if !std::path::Path::new("db/internal.db").exists() {
+        let _ = std::fs::File::create("db/internal.db");
+    }
+
+    let sqlite_pool = get_sqlite_pool(5, "sqlite://db/internal.db").await;
 
     let app_state = web::Data::new(AppState {
         pg_pool: Mutex::new(None),
