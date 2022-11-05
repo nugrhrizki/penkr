@@ -82,9 +82,9 @@ async fn introspect(state: web::Data<AppState>) -> impl Responder {
                 }
                 return HttpResponse::Ok().json(tables_with_columns);
             }
-            return HttpResponse::InternalServerError().body("Failed to introspect Postgres");
+            return HttpResponse::InternalServerError().body("Failed to introspect database");
         }
-        return HttpResponse::InternalServerError().body("Not connected to Postgres");
+        return HttpResponse::InternalServerError().body("Not connected to database");
     }
     HttpResponse::InternalServerError().body("Failed to lock pool")
 }
@@ -94,13 +94,13 @@ async fn status(state: web::Data<AppState>) -> impl Responder {
     let state_pg_pool = state.dbx.lock().ok();
     if let Some(pg_pool) = state_pg_pool {
         if let Some(dbx) = pg_pool.as_ref() {
-            let status = dbx.select_one("select 1").await;
+            let status = dbx.raw("select 1").await;
             if let Ok(_) = status {
-                return HttpResponse::Ok().body("Connected to Postgres");
+                return HttpResponse::Ok().body("Connected to database");
             }
-            return HttpResponse::InternalServerError().body("Failed to connect to Postgres");
+            return HttpResponse::InternalServerError().body("Failed to connect to database");
         }
-        return HttpResponse::InternalServerError().body("Not connected to Postgres");
+        return HttpResponse::InternalServerError().body("Not connected to database");
     }
     HttpResponse::InternalServerError().body("Failed to lock pool")
 }
@@ -116,13 +116,13 @@ async fn select(body: web::Json<Query>, state: web::Data<AppState>) -> impl Resp
     let query = body.query.clone();
     if let Some(pg_pool) = state_pg_pool {
         if let Some(dbx) = pg_pool.as_ref() {
-            let users = dbx.select(&query).await;
+            let users = dbx.raw(&query).await;
             if let Ok(user) = users {
                 return HttpResponse::Ok().json(user);
             }
-            return HttpResponse::InternalServerError().body("Failed to connect to Postgres");
+            return HttpResponse::InternalServerError().body("Failed to connect to database");
         }
-        return HttpResponse::InternalServerError().body("Not connected to Postgres");
+        return HttpResponse::InternalServerError().body("Not connected to database");
     }
     HttpResponse::InternalServerError().body("Failed to lock pool")
 }

@@ -1,11 +1,16 @@
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
 use serde::Deserialize;
 
-use crate::AppState;
+use crate::{internal::db::DBQuery, AppState};
 
 #[derive(Deserialize)]
 struct QueryFilter {
-    limit: Option<u64>,
+    columns: Option<Vec<String>>,
+    where_clause: Option<String>,
+    order_by: Option<String>,
+    order: Option<String>,
+    limit: Option<String>,
+    offset: Option<String>,
 }
 
 #[get("/{collection}")]
@@ -17,10 +22,16 @@ async fn get_all(
     let state_pg_pool = state.dbx.lock().ok();
     if let Some(pg_pool) = state_pg_pool {
         if let Some(dbx) = pg_pool.as_ref() {
-            let limit = filter.limit.unwrap_or(100);
-            let users = dbx
-                .select(format!("select * from {} limit {}", path, limit).as_str())
-                .await;
+            let query = DBQuery {
+                table: path.clone(),
+                columns: filter.columns.clone(),
+                where_clause: filter.where_clause.clone(),
+                order_by: filter.order_by.clone(),
+                order: filter.order.clone(),
+                limit: filter.limit.clone(),
+                offset: filter.offset.clone(),
+            };
+            let users = dbx.select(&query).await;
             if let Ok(user) = users {
                 return HttpResponse::Ok().json(user);
             }
@@ -33,13 +44,24 @@ async fn get_all(
 }
 
 #[get("/{collection}/{id}")]
-async fn get(path: web::Path<(String, String)>, state: web::Data<AppState>) -> impl Responder {
+async fn get(
+    path: web::Path<(String, String)>,
+    filter: web::Query<QueryFilter>,
+    state: web::Data<AppState>,
+) -> impl Responder {
     let state_pg_pool = state.dbx.lock().ok();
     if let Some(pg_pool) = state_pg_pool {
         if let Some(dbx) = pg_pool.as_ref() {
-            let users = dbx
-                .select_one(format!("select * from {} where id = {}", path.0, path.1).as_str())
-                .await;
+            let query = DBQuery {
+                table: path.0.clone(),
+                columns: filter.columns.clone(),
+                where_clause: Some(format!("id = '{}'", path.1)),
+                order_by: filter.order_by.clone(),
+                order: filter.order.clone(),
+                limit: filter.limit.clone(),
+                offset: filter.offset.clone(),
+            };
+            let users = dbx.select_one(&query).await;
             if let Ok(user) = users {
                 return HttpResponse::Ok().json(user);
             }
@@ -53,23 +75,31 @@ async fn get(path: web::Path<(String, String)>, state: web::Data<AppState>) -> i
     HttpResponse::InternalServerError().body("Failed to lock pool")
 }
 
-#[get("/{collection}/{id}/{field}")]
+#[get("/{collection}/{where}/{value}")]
 async fn get_by_field(
     path: web::Path<(String, String, String)>,
+    filter: web::Query<QueryFilter>,
     state: web::Data<AppState>,
 ) -> impl Responder {
     let state_pg_pool = state.dbx.lock().ok();
     if let Some(pg_pool) = state_pg_pool {
         if let Some(dbx) = pg_pool.as_ref() {
-            let users = dbx
-                .select(format!("select * from {} where {} = {}", path.0, path.2, path.1).as_str())
-                .await;
+            let query = DBQuery {
+                table: path.0.clone(),
+                columns: filter.columns.clone(),
+                where_clause: Some(format!("{} = '{}'", path.1, path.2)),
+                order_by: filter.order_by.clone(),
+                order: filter.order.clone(),
+                limit: filter.limit.clone(),
+                offset: filter.offset.clone(),
+            };
+            let users = dbx.select(&query).await;
             if let Ok(user) = users {
                 return HttpResponse::Ok().json(user);
             }
             return HttpResponse::NotFound().body(format!(
-                "Collection {} with id {} is not found",
-                path.0, path.1
+                "Collection {} with {} {} is not found",
+                path.0, path.1, path.2
             ));
         }
         return HttpResponse::InternalServerError().body("Not connected to database");
