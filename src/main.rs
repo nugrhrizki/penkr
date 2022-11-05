@@ -1,36 +1,43 @@
 mod internal;
 mod models;
 mod utils;
+mod api;
 
 use std::sync::Mutex;
 
 use actix_cors::Cors;
-use actix_web::{get, middleware::Logger, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, middleware::Logger, web, App, HttpServer, Responder};
+use actix_files as fs;
 
 use crate::utils::db::get_sqlite_pool;
+use crate::internal::db::DBX;
 
 #[derive(Debug)]
 pub struct AppState {
-    pg_pool: Mutex<Option<sqlx::PgPool>>,
-    sqlite_pool: Option<sqlx::SqlitePool>,
+    dbx: Mutex<Option<DBX>>,
+    sqlite_pool: sqlx::SqlitePool,
 }
 
-#[get("/")]
-async fn index(state: web::Data<AppState>) -> impl Responder {
-    HttpResponse::Ok().body(format!("Hello world! {:#?}", state))
+#[get("/{tail:.*}")]
+async fn index() -> impl Responder {
+    fs::NamedFile::open("public/index.html")
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    if !std::path::Path::new("db/internal.db").exists() {
-        let _ = std::fs::File::create("db/internal.db");
+    if !std::path::Path::new("db").exists() {
+        std::fs::create_dir("db").expect("Failed to create db directory");
     }
 
-    let sqlite_pool = get_sqlite_pool(5, "sqlite://db/internal.db").await;
+    if !std::path::Path::new("db/pnkr.db").exists() {
+        std::fs::File::create("db/pnkr.db").expect("Failed to create pnkr.db");
+    }
+
+    let sqlite_pool = get_sqlite_pool(5, "sqlite://db/pnkr.db").await.expect("Failed to connect to application database");
 
     let app_state = web::Data::new(AppState {
-        pg_pool: Mutex::new(None),
-        sqlite_pool: sqlite_pool.ok(),
+        dbx: Mutex::new(None),
+        sqlite_pool,
     });
 
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
@@ -40,7 +47,8 @@ async fn main() -> std::io::Result<()> {
             .wrap(Cors::permissive())
             .wrap(Logger::default())
             .app_data(app_state.clone())
-            .service(web::scope("/v").configure(internal::init_routes))
+            .service(web::scope("/api").configure(api::init_routes))
+            .service(fs::Files::new("/public", "./public"))
             .service(index)
     })
     .bind(("0.0.0.0", 8000))?
