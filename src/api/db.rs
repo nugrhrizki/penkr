@@ -1,4 +1,4 @@
-use actix_web::{get, post, put, web, HttpResponse, Responder, delete};
+use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
 use serde::Deserialize;
 
 use crate::internal::db::DBX;
@@ -33,12 +33,20 @@ async fn connect(body: web::Json<Connect>, state: web::Data<AppState>) -> impl R
 #[delete("/disconnect")]
 async fn disconnect(state: web::Data<AppState>) -> impl Responder {
     let dbx = state.dbx.lock().ok();
-    if let Some(mut dbx) = dbx {
-        if dbx.is_none() {
-            return HttpResponse::Ok().body("You're not connected to database");
+    if let Some(mut mtx_dbx) = dbx {
+        if let Some(dbx) = mtx_dbx.as_mut() {
+            match dbx.disconnect().await {
+                Ok(_) => {
+                    *mtx_dbx = None;
+                    return HttpResponse::Ok().body("Disconnected from database");
+                }
+                Err(_) => {
+                    return HttpResponse::InternalServerError()
+                        .body("Failed to disconnect from database");
+                }
+            }
         }
-        *dbx = None;
-        return HttpResponse::Ok().body("Disconnected from database");
+        return HttpResponse::Ok().body("You're not connected to database");
     }
     HttpResponse::InternalServerError().body("Failed to lock dbx")
 }

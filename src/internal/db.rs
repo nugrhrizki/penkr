@@ -1,5 +1,3 @@
-use actix_web::{HttpResponse, Responder};
-
 use crate::{internal::de::QueryResult, utils::db::get_pg_pool};
 
 #[derive(Debug)]
@@ -8,13 +6,13 @@ pub struct DBX {
 }
 
 impl DBX {
-    pub async fn new(max_connections: u32, db_url: &str) -> Result<Self, impl Responder> {
-        let pool = get_pg_pool(max_connections, db_url).await;
-        if let Ok(pool) = pool {
-            Ok(Self { pool })
-        } else {
-            Err(HttpResponse::InternalServerError().body("Failed to connect to Postgres"))
-        }
+    pub async fn new(max_connections: u32, db_url: &str) -> Result<Self, sqlx::Error> {
+        let pool = get_pg_pool(max_connections, db_url).await?;
+        Ok(Self { pool })
+    }
+
+    pub async fn disconnect(&self) -> Result<(), sqlx::Error> {
+        Ok(self.pool.close().await)
     }
 
     pub async fn select(&self, query: &str) -> Result<Vec<QueryResult>, sqlx::Error> {

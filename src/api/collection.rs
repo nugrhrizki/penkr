@@ -1,14 +1,25 @@
-use actix_web::{get,put,delete, post, web, HttpResponse, Responder};
+use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
+use serde::Deserialize;
 
 use crate::AppState;
 
+#[derive(Deserialize)]
+struct QueryFilter {
+    limit: Option<u64>,
+}
+
 #[get("/{collection}")]
-async fn get_all(path: web::Path<String>, state: web::Data<AppState>) -> impl Responder {
+async fn get_all(
+    path: web::Path<String>,
+    filter: web::Query<QueryFilter>,
+    state: web::Data<AppState>,
+) -> impl Responder {
     let state_pg_pool = state.dbx.lock().ok();
     if let Some(pg_pool) = state_pg_pool {
         if let Some(dbx) = pg_pool.as_ref() {
+            let limit = filter.limit.unwrap_or(100);
             let users = dbx
-                .select(format!("select * from {} limit 100", path).as_str())
+                .select(format!("select * from {} limit {}", path, limit).as_str())
                 .await;
             if let Ok(user) = users {
                 return HttpResponse::Ok().json(user);
@@ -51,11 +62,7 @@ async fn get_by_field(
     if let Some(pg_pool) = state_pg_pool {
         if let Some(dbx) = pg_pool.as_ref() {
             let users = dbx
-                .select(format!(
-                    "select * from {} where {} = {}",
-                    path.0, path.2, path.1
-                )
-                .as_str())
+                .select(format!("select * from {} where {} = {}", path.0, path.2, path.1).as_str())
                 .await;
             if let Ok(user) = users {
                 return HttpResponse::Ok().json(user);
@@ -163,10 +170,7 @@ async fn update_batch(
 }
 
 #[delete("/{collection}/{id}")]
-async fn delete(
-    path: web::Path<(String, String)>,
-    state: web::Data<AppState>,
-) -> impl Responder {
+async fn delete(path: web::Path<(String, String)>, state: web::Data<AppState>) -> impl Responder {
     let state_pg_pool = state.dbx.lock().ok();
     if let Some(pg_pool) = state_pg_pool {
         if let Some(dbx) = pg_pool.as_ref() {
