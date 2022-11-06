@@ -1,95 +1,133 @@
-use actix_web::{get, post, web, HttpResponse, Responder};
-use serde::Deserialize;
+use sqlx::{Postgres, QueryBuilder};
 
-use crate::{
-    models::schema::{Column, Table},
-    utils::db::get_pg_pool,
-    AppState,
-};
+use crate::{internal::de::QueryResult, utils::db::get_pg_pool};
 
-#[derive(Deserialize)]
-struct DbBody {
-    max_connections: u32,
-    db_url: String,
+#[derive(Debug)]
+pub struct DBX {
+    pub pool: sqlx::Pool<sqlx::Postgres>,
 }
 
-#[post("/connect")]
-async fn connect(body: web::Json<DbBody>, state: web::Data<AppState>) -> impl Responder {
-    let state_pg_pool = state.pg_pool.lock().ok();
-    let db_url = body.db_url.clone();
-    let max_connections = body.max_connections.clone();
-    if let Some(mut pg_pool) = state_pg_pool {
-        let pool = get_pg_pool(max_connections, db_url.as_str()).await;
-        if let Some(new_pool) = pool.ok() {
-            *pg_pool = Some(new_pool);
-            return HttpResponse::Ok().body("Connected to Postgres");
-        }
-        return HttpResponse::InternalServerError().body("Failed to connect to Postgres");
+pub struct DBQuery {
+    pub table: String,
+    pub columns: Option<String>,
+    pub r#where: Option<String>,
+    pub order_by: Option<String>,
+    pub order: Option<String>,
+    pub limit: Option<i32>,
+    pub offset: Option<i32>,
+}
+
+impl DBX {
+    pub async fn new(max_connections: u32, db_url: &str) -> Result<Self, sqlx::Error> {
+        let pool = get_pg_pool(max_connections, db_url).await?;
+        Ok(Self { pool })
     }
-    HttpResponse::InternalServerError().body("Failed to lock pool")
-}
 
-#[get("/disconnect")]
-async fn disconnect(state: web::Data<AppState>) -> impl Responder {
-    let state_pg_pool = state.pg_pool.lock().ok();
-    if let Some(mut pg_pool) = state_pg_pool {
-        *pg_pool = None;
-        return HttpResponse::Ok().body("Disconnected from Postgres");
+    pub async fn disconnect(&self) -> Result<(), sqlx::Error> {
+        Ok(self.pool.close().await)
     }
-    HttpResponse::InternalServerError().body("Failed to lock pool")
-}
 
-#[get("/introspect")]
-async fn introspect(state: web::Data<AppState>) -> impl Responder {
-    let state_pg_pool = state.pg_pool.lock().ok();
-    if let Some(pg_pool) = state_pg_pool {
-        if let Some(pg_pool) = pg_pool.as_ref() {
-            let tables = sqlx::query_as::<_, Table>(
-                r#"select t.table_name as name from information_schema.tables t
-                where t.table_schema = 'public'
-                and t.table_catalog = 'db_las'
-                and t.table_type = 'BASE TABLE'"#,
-            )
-            .fetch_all(pg_pool)
-            .await;
-            if let Ok(tables) = tables {
-                let mut tables_with_columns: Vec<Column> = Vec::new();
-                for table in tables {
-                    let columns = sqlx::query_as::<_, Column>(
-                        r#"select t.column_name as name, t.data_type, t.is_nullable, t.column_default as default_value, t.character_maximum_length as maximum_length from information_schema.columns t
-                        where t.table_schema = 'public'
-                        and t.table_catalog = 'db_las'
-                        and t.table_name = $1"#,
-                    )
-                    .bind(table.name)
-                    .fetch_all(pg_pool)
-                    .await;
-                    if let Ok(columns) = columns {
-                        tables_with_columns.extend(columns);
-                    }
-                }
-                return HttpResponse::Ok().json(tables_with_columns);
+    pub async fn raw(&self, query: &str) -> Result<Vec<QueryResult>, sqlx::Error> {
+        let result = sqlx::query_as::<_, QueryResult>(query)
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(result)
+    }
+
+    pub async fn select(&self, query: &DBQuery) -> Result<Vec<QueryResult>, sqlx::Error> {
+        let mut query_builder = QueryBuilder::new("select ");
+
+        let query = self
+            .query_filter(query, &mut query_builder)
+            .build_query_as::<QueryResult>()
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(query)
+    }
+
+    pub async fn select_one(&self, query: &DBQuery) -> Result<QueryResult, sqlx::Error> {
+        let mut query_builder = QueryBuilder::new("select ");
+
+        let query = self
+            .query_filter(query, &mut query_builder)
+            .build_query_as::<QueryResult>()
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(query)
+    }
+
+    pub async fn insert(&self, query: &str) -> Result<Vec<QueryResult>, sqlx::Error> {
+        let user = sqlx::query_as::<_, QueryResult>(&query)
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(user)
+    }
+
+    pub async fn insert_one(&self, query: &str) -> Result<QueryResult, sqlx::Error> {
+        let user = sqlx::query_as::<_, QueryResult>(&query)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(user)
+    }
+
+    pub async fn update(&self, query: &str) -> Result<QueryResult, sqlx::Error> {
+        let user = sqlx::query_as::<_, QueryResult>(&query)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(user)
+    }
+
+    pub async fn delete(&self, query: &str) -> Result<QueryResult, sqlx::Error> {
+        let user = sqlx::query_as::<_, QueryResult>(&query)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(user)
+    }
+
+    fn query_filter<'a>(
+        &self,
+        query: &'a DBQuery,
+        query_builder: &'a mut QueryBuilder<'a, Postgres>,
+    ) -> &'a mut QueryBuilder<'a, Postgres> {
+        match &query.columns {
+            Some(columns) => {
+                query_builder.push(columns);
             }
-            return HttpResponse::InternalServerError().body("Failed to introspect Postgres");
+            None => {
+                query_builder.push("*");
+            }
         }
-        return HttpResponse::InternalServerError().body("Not connected to Postgres");
-    }
-    HttpResponse::InternalServerError().body("Failed to lock pool")
-}
 
-#[get("/reconnect")]
-async fn reconnect(body: web::Json<DbBody>, state: web::Data<AppState>) -> impl Responder {
-    let state_pg_pool = state.pg_pool.lock().ok();
-    let db_url = body.db_url.clone();
-    let max_connections = body.max_connections.clone();
-    if let Some(mut pg_pool) = state_pg_pool {
-        *pg_pool = None;
-        let pool = get_pg_pool(max_connections, db_url.as_str()).await;
-        if let Some(new_pool) = pool.ok() {
-            *pg_pool = Some(new_pool);
-            return HttpResponse::Ok().body("Reconnected to Postgres");
+        query_builder.push(" from ");
+        query_builder.push(query.table.as_str());
+
+        if let Some(r#where) = &query.r#where {
+            query_builder.push(" where ");
+            query_builder.push(r#where.as_str());
         }
-        return HttpResponse::InternalServerError().body("Failed to reconnect to Postgres");
+
+        if let Some(order_by) = &query.order_by {
+            query_builder.push(" order by ");
+            query_builder.push_bind(order_by.as_str());
+        }
+
+        if let Some(order) = &query.order {
+            query_builder.push(" ");
+            query_builder.push_bind(order.as_str());
+        }
+
+        if let Some(limit) = &query.limit {
+            query_builder.push(" limit ");
+            query_builder.push_bind(limit);
+        }
+
+        if let Some(offset) = &query.offset {
+            query_builder.push(" offset ");
+            query_builder.push_bind(offset);
+        }
+
+        query_builder
     }
-    HttpResponse::InternalServerError().body("Failed to lock pool")
 }
