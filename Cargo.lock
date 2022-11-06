@@ -1281,6 +1281,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "penkr"
+version = "0.1.0"
+dependencies = [
+ "actix-cors",
+ "actix-files",
+ "actix-web",
+ "chrono",
+ "env_logger",
+ "log",
+ "serde",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2030,21 +2045,6 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
-
-[[package]]
-name = "visorm"
-version = "0.1.0"
-dependencies = [
- "actix-cors",
- "actix-files",
- "actix-web",
- "chrono",
- "env_logger",
- "log",
- "serde",
- "serde_json",
- "sqlx",
-]
 
 [[package]]
 name = "wasi"

@@ -5,12 +5,12 @@ use crate::{internal::db::DBQuery, AppState};
 
 #[derive(Deserialize)]
 struct QueryFilter {
-    columns: Option<Vec<String>>,
-    where_clause: Option<String>,
+    columns: Option<String>,
+    r#where: Option<String>,
     order_by: Option<String>,
     order: Option<String>,
-    limit: Option<String>,
-    offset: Option<String>,
+    limit: Option<i32>,
+    offset: Option<i32>,
 }
 
 #[get("/{collection}")]
@@ -25,18 +25,17 @@ async fn get_all(
             let query = DBQuery {
                 table: path.clone(),
                 columns: filter.columns.clone(),
-                where_clause: filter.where_clause.clone(),
+                r#where: filter.r#where.clone(),
                 order_by: filter.order_by.clone(),
                 order: filter.order.clone(),
                 limit: filter.limit.clone(),
                 offset: filter.offset.clone(),
             };
-            let users = dbx.select(&query).await;
-            if let Ok(user) = users {
-                return HttpResponse::Ok().json(user);
-            }
-            return HttpResponse::InternalServerError()
-                .body(format!("Failed to collections: {}", path));
+            let result = dbx.select(&query).await;
+            return match result {
+                Ok(rows) => HttpResponse::Ok().json(rows),
+                Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+            };
         }
         return HttpResponse::InternalServerError().body("Not connected to database");
     }
@@ -55,7 +54,7 @@ async fn get(
             let query = DBQuery {
                 table: path.0.clone(),
                 columns: filter.columns.clone(),
-                where_clause: Some(format!("id = '{}'", path.1)),
+                r#where: Some(format!("id = '{}'", path.1)),
                 order_by: filter.order_by.clone(),
                 order: filter.order.clone(),
                 limit: filter.limit.clone(),
@@ -87,7 +86,7 @@ async fn get_by_field(
             let query = DBQuery {
                 table: path.0.clone(),
                 columns: filter.columns.clone(),
-                where_clause: Some(format!("{} = '{}'", path.1, path.2)),
+                r#where: Some(format!("{} = '{}'", path.1, path.2)),
                 order_by: filter.order_by.clone(),
                 order: filter.order.clone(),
                 limit: filter.limit.clone(),

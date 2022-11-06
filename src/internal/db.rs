@@ -9,12 +9,12 @@ pub struct DBX {
 
 pub struct DBQuery {
     pub table: String,
-    pub columns: Option<Vec<String>>,
-    pub where_clause: Option<String>,
+    pub columns: Option<String>,
+    pub r#where: Option<String>,
     pub order_by: Option<String>,
     pub order: Option<String>,
-    pub limit: Option<String>,
-    pub offset: Option<String>,
+    pub limit: Option<i32>,
+    pub offset: Option<i32>,
 }
 
 impl DBX {
@@ -93,8 +93,7 @@ impl DBX {
     ) -> &'a mut QueryBuilder<'a, Postgres> {
         match &query.columns {
             Some(columns) => {
-                let columns = columns.join(", ");
-                query_builder.push_bind(columns);
+                query_builder.push(columns);
             }
             None => {
                 query_builder.push("*");
@@ -104,9 +103,9 @@ impl DBX {
         query_builder.push(" from ");
         query_builder.push(query.table.as_str());
 
-        if let Some(where_clause) = &query.where_clause {
+        if let Some(r#where) = &query.r#where {
             query_builder.push(" where ");
-            query_builder.push_bind(where_clause.as_str());
+            query_builder.push(r#where.as_str());
         }
 
         if let Some(order_by) = &query.order_by {
@@ -121,12 +120,12 @@ impl DBX {
 
         if let Some(limit) = &query.limit {
             query_builder.push(" limit ");
-            query_builder.push_bind(limit.as_str());
+            query_builder.push_bind(limit);
         }
 
         if let Some(offset) = &query.offset {
             query_builder.push(" offset ");
-            query_builder.push_bind(offset.as_str());
+            query_builder.push_bind(offset);
         }
 
         query_builder
