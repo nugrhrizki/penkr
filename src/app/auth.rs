@@ -12,13 +12,14 @@ pub struct Credentials {
 
 #[post("/login")]
 pub async fn login(body: web::Json<Credentials>, state: web::Data<AppState>) -> impl Responder {
-    let sqlite_pool = &state.sqlite_pool;
-    let user =
-        sqlx::query_as::<_, Credentials>("SELECT * FROM users WHERE username = $1 AND password = $2")
-            .bind(&body.username)
-            .bind(&body.password)
-            .fetch_one(sqlite_pool)
-            .await;
+    let sqlite_pool = &state.app_db;
+    let user = sqlx::query_as::<_, Credentials>(
+        "SELECT * FROM users WHERE username = $1 AND password = $2",
+    )
+    .bind(&body.username)
+    .bind(&body.password)
+    .fetch_one(sqlite_pool)
+    .await;
     if let Ok(user) = user {
         return HttpResponse::Ok().body(format!("Logged in as {:#?}", user));
     }
@@ -32,7 +33,7 @@ pub async fn logout() -> impl Responder {
 
 #[post("/register")]
 pub async fn register(body: web::Json<Credentials>, state: web::Data<AppState>) -> impl Responder {
-    let sqlite_pool = &state.sqlite_pool;
+    let sqlite_pool = &state.app_db;
     let user = sqlx::query_as::<_, Credentials>("SELECT * FROM users WHERE username = $1")
         .bind(&body.username)
         .fetch_one(sqlite_pool)
