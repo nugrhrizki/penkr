@@ -45,8 +45,8 @@ async fn connect(
             *dbx = Some(new_dbx);
             let _ = query(
                 r#"
-                    INSERT INTO "database"
-                    ("name" ,"host" ,"port" ,"username" ,"password" ,"type")
+                    INSERT INTO databases
+                    (name, host, port, username, password, type)
                     VALUES
                     (?, ?, ?, ?, ?, ?)
                 "#,
@@ -76,7 +76,7 @@ async fn introspect_collection(state: web::Data<AppState>) -> impl Responder {
     let app_db = &state.app_db;
 
     // select database name from database
-    let database_name = sqlx::query_as::<_, DatabaseName>("SELECT name FROM database LIMIT 1")
+    let database_name = sqlx::query_as::<_, DatabaseName>("SELECT name FROM databases LIMIT 1")
         .fetch_one(app_db)
         .await;
 
@@ -90,7 +90,7 @@ async fn introspect_collection(state: web::Data<AppState>) -> impl Responder {
             return match result {
                 Ok(rows) => {
                     let mut query_builder =
-                        QueryBuilder::new("insert into collection (name) values ");
+                        QueryBuilder::new("insert into collections (name) values ");
 
                     for (index, row) in rows.iter().enumerate() {
                         query_builder.push("(");

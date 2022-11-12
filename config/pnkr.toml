@@ -6,7 +6,7 @@ host = "0.0.0.0"
 name = "postgres"
 host = "localhost"
 port = 5432
-user = "postgres"
+username = "postgres"
 password = "postgres"
 
 [[cors]]
@@ -22,6 +22,6 @@ headers = [
   "X-Api-Version",
   "X-File-Name"
 ]
-exposedHeaders = [ "X-Api-Version", "X-Request-Id", "X-Response-Time" ]
+expose_headers = [ "X-Api-Version", "X-Request-Id", "X-Response-Time" ]
 credentials = true
-maxAge = 3600
+max_age = 3600

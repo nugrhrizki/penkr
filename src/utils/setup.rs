@@ -60,11 +60,12 @@ pub async fn setup_app_db() -> Result<Pool<Sqlite>, Box<dyn std::error::Error>> 
     if !is_configured {
         query(
             r#"
-            CREATE TABLE IF NOT EXISTS "user" (
-                "id"	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-                "password"	TEXT NOT NULL,
-                "email"	TEXT NOT NULL UNIQUE,
-            );
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                password TEXT NOT NULL,
+                email TEXT NOT NULL
+            )
             "#,
         )
         .execute(&pool)
@@ -73,26 +74,27 @@ pub async fn setup_app_db() -> Result<Pool<Sqlite>, Box<dyn std::error::Error>> 
 
         query(
             r#"
-            INSERT INTO "user" ("password", "email") VALUES (?, ?);
+            INSERT INTO users (name, password, email) VALUES (?, ?, ?);
             "#,
         )
+        .bind("Super Admin")
         .bind("secret")
-        .bind("su@root")
+        .bind("su@root.dev")
         .execute(&pool)
         .await
         .expect("Failed to create default user");
 
         query(
             r#"
-            CREATE TABLE IF NOT EXISTS "database" (
-                "id"	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-                "name"	TEXT NOT NULL,
-                "host"	TEXT NOT NULL,
-                "port"	INTEGER NOT NULL,
-                "username"	TEXT NOT NULL,
-                "password"	TEXT NOT NULL,
-                "type"	TEXT NOT NULL,
-            );
+            CREATE TABLE IF NOT EXISTS databases (
+                id	INTEGER PRIMARY KEY AUTOINCREMENT,
+                name	TEXT NOT NULL,
+                host	TEXT NOT NULL,
+                port	INTEGER NOT NULL,
+                username	TEXT NOT NULL,
+                password	TEXT NOT NULL,
+                type	TEXT NOT NULL
+            )
             "#,
         )
         .execute(&pool)
@@ -101,9 +103,9 @@ pub async fn setup_app_db() -> Result<Pool<Sqlite>, Box<dyn std::error::Error>> 
 
         query(
             r#"
-            CREATE TABLE IF NOT EXISTS "collection" (
-                "id"	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-                "name"	TEXT NOT NULL,
+            CREATE TABLE IF NOT EXISTS collections (
+                id	INTEGER PRIMARY KEY AUTOINCREMENT,
+                name	TEXT NOT NULL
             );
             "#,
         )
