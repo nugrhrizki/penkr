@@ -1,10 +1,11 @@
+use actix_session::Session;
 use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use sqlx::{query, FromRow, QueryBuilder};
 
 use crate::{
     core::db::{DBXAction, DBX},
-    AppState,
+    AppState, utils::responder::Respond,
 };
 
 #[derive(Deserialize)]
@@ -20,8 +21,18 @@ struct DatabaseConnection {
 #[post("/connect")]
 async fn connect(
     body: web::Json<DatabaseConnection>,
+    session: Session,
     state: web::Data<AppState>,
 ) -> impl Responder {
+    let email: Option<String> = session.get("user_email").unwrap_or(None);
+    if email.is_none() {
+        return HttpResponse::Unauthorized().json(Respond {
+            status: 401,
+            message: "Unauthorized".to_string(),
+            data: None,
+        });
+    }
+
     let mut dbx = state.dbx.lock().unwrap();
     let app_db = &state.app_db;
 
@@ -71,7 +82,16 @@ struct DatabaseName {
 }
 
 #[get("/introspect_collection")]
-async fn introspect_collection(state: web::Data<AppState>) -> impl Responder {
+async fn introspect_collection(session: Session, state: web::Data<AppState>) -> impl Responder {
+    let email: Option<String> = session.get("user_email").unwrap_or(None);
+    if email.is_none() {
+        return HttpResponse::Unauthorized().json(Respond {
+            status: 401,
+            message: "Unauthorized".to_string(),
+            data: None,
+        });
+    }
+
     let state_dbx = state.dbx.lock().unwrap();
     let app_db = &state.app_db;
 
@@ -89,12 +109,19 @@ async fn introspect_collection(state: web::Data<AppState>) -> impl Responder {
                 .await;
             return match result {
                 Ok(rows) => {
+                    let truncated = query("DELETE FROM collections").execute(app_db).await;
+
+                    if let Err(e) = truncated {
+                        return HttpResponse::InternalServerError()
+                            .body(format!("Failed to truncate collections table, {:#?}", e));
+                    }
+
                     let mut query_builder =
                         QueryBuilder::new("insert into collections (name) values ");
 
                     for (index, row) in rows.iter().enumerate() {
                         query_builder.push("(");
-                        query_builder.push(&row.table_name);
+                        query_builder.push_bind(&row.table_name);
                         query_builder.push(")");
                         if index != rows.len() - 1 {
                             query_builder.push(",");
@@ -125,15 +152,58 @@ struct Collection {
 }
 
 #[get("/collections")]
-async fn collections(state: web::Data<AppState>) -> impl Responder {
+async fn collections(session: Session, state: web::Data<AppState>) -> impl Responder {
+    let email: Option<String> = session.get("user_email").unwrap_or(None);
+    if email.is_none() {
+        return HttpResponse::Unauthorized().json(Respond {
+            status: 401,
+            message: "Unauthorized".to_string(),
+            data: None,
+        });
+    }
+
     let app_db = &state.app_db;
 
-    let result = sqlx::query_as::<_, Collection>("SELECT * FROM \"collection\"")
+    let result = sqlx::query_as::<_, Collection>("SELECT * FROM collections")
         .fetch_all(app_db)
         .await;
 
     match result {
         Ok(rows) => HttpResponse::Ok().json(rows),
         Err(_) => HttpResponse::InternalServerError().body("Failed to get collections"),
+    }
+}
+
+#[derive(Deserialize)]
+struct RawQuery {
+    query: String,
+}
+
+#[post("/raw_query")]
+async fn raw_query(
+    session: Session,
+    body: web::Json<RawQuery>,
+    state: web::Data<AppState>,
+) -> impl Responder {
+    let email: Option<String> = session.get("user_email").unwrap_or(None);
+    if email.is_none() {
+        return HttpResponse::Unauthorized().json(Respond {
+            status: 401,
+            message: "Unauthorized".to_string(),
+            data: None,
+        });
+    }
+
+    let state_dbx = state.dbx.lock().unwrap();
+
+    if let Some(dbx) = &*state_dbx {
+        let result = dbx.raw(body.query.clone()).execute().await;
+
+        match result {
+            Ok(_) => HttpResponse::Ok().body("Successfully executed query"),
+            Err(_) => HttpResponse::InternalServerError().body("Failed to execute query"),
+        }
+    } else {
+        HttpResponse::InternalServerError().body("Not connected to database")
     }
 }

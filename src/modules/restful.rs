@@ -2,11 +2,11 @@ use actix_web::{delete, get, patch, post, web, HttpResponse, Responder};
 use indexmap::IndexMap;
 use serde::Deserialize;
 
-use crate::{core::db::DBXAction, AppState};
+use crate::{core::db::DBXAction, utils::responder::Respond, AppState};
 
 #[derive(Deserialize)]
 struct QueryFilter {
-    field: Option<Vec<String>>,
+    field: Option<String>,
     limit: Option<i32>,
     sort: Option<String>,
     filter: Option<String>,
@@ -32,12 +32,24 @@ async fn list(
             .get_all()
             .await;
         return match result {
-            Ok(rows) => HttpResponse::Ok().json(rows),
-            Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+            Ok(rows) => HttpResponse::Ok().json(Respond {
+                status: 200,
+                message: "OK".to_string(),
+                data: Some(serde_json::to_value(rows).unwrap()),
+            }),
+            Err(e) => HttpResponse::InternalServerError().json(Respond {
+                status: 500,
+                message: format!("Failed to get records of {}", collection).to_string(),
+                data: Some(format!("{:#?}", e).into()),
+            }),
         };
     }
 
-    HttpResponse::InternalServerError().body("Not connected to database")
+    HttpResponse::InternalServerError().json(Respond {
+        status: 500,
+        message: "Not connected to database".to_string(),
+        data: None,
+    })
 }
 
 #[get("/{collection}/{id}")]
@@ -60,13 +72,29 @@ async fn view(
                 .get_one()
                 .await;
             return match record {
-                Ok(row) => HttpResponse::Ok().json(row),
-                Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+                Ok(row) => HttpResponse::Ok().json(Respond {
+                    status: 200,
+                    message: "OK".to_string(),
+                    data: Some(serde_json::to_value(row).unwrap()),
+                }),
+                Err(e) => HttpResponse::InternalServerError().json(Respond {
+                    status: 500,
+                    message: format!(
+                        "Failed to get record in {} with id {}",
+                        collection.0, collection.1
+                    )
+                    .to_string(),
+                    data: Some(format!("{:#?}", e).into()),
+                }),
             };
         }
     }
 
-    HttpResponse::InternalServerError().body("Not connected to database")
+    HttpResponse::InternalServerError().json(Respond {
+        status: 500,
+        message: "Not connected to database".to_string(),
+        data: None,
+    })
 }
 
 #[post("/{collection}")]
@@ -84,13 +112,25 @@ async fn create(
                 .execute()
                 .await;
             return match record {
-                Ok(row) => HttpResponse::Ok().json(row),
-                Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+                Ok(row) => HttpResponse::Ok().json(Respond {
+                    status: 200,
+                    message: "OK".to_string(),
+                    data: Some(serde_json::to_value(row).unwrap()),
+                }),
+                Err(e) => HttpResponse::InternalServerError().json(Respond {
+                    status: 500,
+                    message: format!("Failed to create record in {}", collection).to_string(),
+                    data: Some(format!("{:#?}", e).into()),
+                }),
             };
         }
     }
 
-    HttpResponse::InternalServerError().body("Not connected to database")
+    HttpResponse::InternalServerError().json(Respond {
+        status: 500,
+        message: "Not connected to database".to_string(),
+        data: None,
+    })
 }
 
 #[patch("/{collection}/{id}")]
@@ -109,13 +149,29 @@ async fn update(
                 .execute()
                 .await;
             return match record {
-                Ok(row) => HttpResponse::Ok().json(row),
-                Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+                Ok(row) => HttpResponse::Ok().json(Respond {
+                    status: 200,
+                    message: "OK".to_string(),
+                    data: Some(serde_json::to_value(row).unwrap()),
+                }),
+                Err(e) => HttpResponse::InternalServerError().json(Respond {
+                    status: 500,
+                    message: format!(
+                        "Failed to update record in {} with id {}",
+                        collection.0, collection.1
+                    )
+                    .to_string(),
+                    data: Some(format!("{:#?}", e).into()),
+                }),
             };
         }
     }
 
-    HttpResponse::InternalServerError().body("Not connected to database")
+    HttpResponse::InternalServerError().json(Respond {
+        status: 500,
+        message: "Not connected to database".to_string(),
+        data: None,
+    })
 }
 
 #[delete("/{collection}/{id}")]
@@ -132,13 +188,29 @@ async fn delete(
                 .execute()
                 .await;
             return match record {
-                Ok(row) => HttpResponse::Ok().json(row),
-                Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+                Ok(row) => HttpResponse::Ok().json(Respond {
+                    status: 200,
+                    message: "OK".to_string(),
+                    data: Some(serde_json::to_value(row).unwrap()),
+                }),
+                Err(e) => HttpResponse::InternalServerError().json(Respond {
+                    status: 500,
+                    message: format!(
+                        "Failed to delete record in {} with id {}",
+                        collection.0, collection.1
+                    )
+                    .to_string(),
+                    data: Some(format!("{:#?}", e).into()),
+                }),
             };
         }
     }
 
-    HttpResponse::InternalServerError().body("Not connected to database")
+    HttpResponse::InternalServerError().json(Respond {
+        status: 500,
+        message: "Not connected to database".to_string(),
+        data: None,
+    })
 }
 
 pub fn init(cfg: &mut web::ServiceConfig) {

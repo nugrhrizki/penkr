@@ -7,8 +7,7 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/auth")
             .service(auth::login)
-            .service(auth::logout)
-            .service(auth::register),
+            .service(auth::logout),
     );
     cfg.service(
         web::scope("/db")

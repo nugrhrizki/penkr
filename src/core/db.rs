@@ -1,5 +1,5 @@
 use indexmap::IndexMap;
-use sqlx::{FromRow, Pool, Postgres, QueryBuilder};
+use sqlx::{FromRow, Pool, Postgres, QueryBuilder, postgres::PgQueryResult};
 
 use crate::{core::de::QueryResult, utils::db::get_pg_pool};
 
@@ -21,6 +21,7 @@ pub trait DBXAction {
     fn update(&self, collection: String) -> DBXUpdateBuilder;
     fn delete(&self, collection: String) -> DBXDeleteBuilder;
     fn introspect_collection(&self) -> DBXIntrospectBuilder;
+    fn raw(&self, query: String) -> DBXRawBuilder;
 }
 
 impl DBXAction for DBX {
@@ -43,12 +44,16 @@ impl DBXAction for DBX {
     fn introspect_collection(&self) -> DBXIntrospectBuilder {
         DBXIntrospectBuilder::new(self.pool.clone())
     }
+
+    fn raw(&self, query: String) -> DBXRawBuilder {
+        DBXRawBuilder::new(self.pool.clone(), query)
+    }
 }
 
 pub struct DBXQueryBuilder {
     pool: Pool<Postgres>,
     collection: String,
-    field: Option<Vec<String>>,
+    field: Option<String>,
     limit: Option<i32>,
     sort: Option<String>,
     filter: Option<String>,
@@ -68,11 +73,16 @@ impl DBXQueryBuilder {
 
     pub fn query(
         &mut self,
-        field: Option<Vec<String>>,
+        field: Option<String>,
         limit: Option<i32>,
         sort: Option<String>,
         filter: Option<String>,
     ) -> &mut Self {
+        // prevent sql injection
+        let field = field.map(|f| f.replace(";", ""));
+        let sort = sort.map(|s| s.replace(";", ""));
+        let filter = filter.map(|f| f.replace(";", ""));
+
         self.field = field;
         self.limit = limit;
         self.sort = sort;
@@ -87,12 +97,7 @@ impl DBXQueryBuilder {
         query_builder.push("select ");
         match &self.field {
             Some(field) => {
-                for (i, f) in field.iter().enumerate() {
-                    query_builder.push_bind(f.as_str());
-                    if i != field.len() - 1 {
-                        query_builder.push(", ");
-                    }
-                }
+                query_builder.push(field);
             }
             None => {
                 query_builder.push("*");
@@ -100,7 +105,7 @@ impl DBXQueryBuilder {
         }
 
         query_builder.push(" from ");
-        query_builder.push_bind(self.collection.as_str());
+        query_builder.push(self.collection.as_str());
 
         if let Some(filter) = &self.filter {
             query_builder.push(" where ");
@@ -344,8 +349,8 @@ impl DBXIntrospectBuilder {
         Ok(sqlx::query_as::<_, Collection>(
             r#"
             select
-                table_name,
-            from information_schema.columns
+                table_name
+            from information_schema.tables
             where table_schema = 'public'
             and table_type = 'BASE TABLE'
             and table_catalog = $1
@@ -354,5 +359,22 @@ impl DBXIntrospectBuilder {
         .bind(self.db_name.as_str())
         .fetch_all(&self.pool)
         .await?)
+    }
+}
+
+pub struct DBXRawBuilder {
+    pool: Pool<Postgres>,
+    query: String,
+}
+
+impl DBXRawBuilder {
+    fn new(pool: Pool<Postgres>, query: String) -> Self {
+        Self { pool, query }
+    }
+
+    pub async fn execute(&self) -> Result<PgQueryResult, sqlx::Error> {
+        Ok(sqlx::query(self.query.as_str())
+            .execute(&self.pool)
+            .await?)
     }
 }

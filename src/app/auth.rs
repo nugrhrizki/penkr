@@ -1,54 +1,43 @@
+use actix_session::Session;
 use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::Deserialize;
 use sqlx;
 
-use crate::AppState;
+use crate::{AppState, utils::responder::Respond};
 
 #[derive(sqlx::FromRow, Deserialize, Debug)]
 pub struct Credentials {
-    pub username: String,
+    pub email: String,
     pub password: String,
 }
 
 #[post("/login")]
-pub async fn login(body: web::Json<Credentials>, state: web::Data<AppState>) -> impl Responder {
+pub async fn login(body: web::Json<Credentials>, session: Session, state: web::Data<AppState>) -> impl Responder {
     let sqlite_pool = &state.app_db;
     let user = sqlx::query_as::<_, Credentials>(
-        "SELECT * FROM users WHERE username = $1 AND password = $2",
+        "SELECT * FROM users WHERE email = $1 AND password = $2",
     )
-    .bind(&body.username)
+    .bind(&body.email)
     .bind(&body.password)
     .fetch_one(sqlite_pool)
     .await;
     if let Ok(user) = user {
-        return HttpResponse::Ok().body(format!("Logged in as {:#?}", user));
+        session.insert("user_email", user.email).unwrap();
+        return HttpResponse::Ok().json(Respond {
+            status: 200,
+            message: "Logged in successfully".to_string(),
+            data: None,
+        });
     }
-    HttpResponse::BadRequest().body("Invalid username or password")
+    HttpResponse::BadRequest().json(Respond {
+        status: 400,
+        message: "Invalid credentials".to_string(),
+        data: None,
+    })
 }
 
 #[get("/logout")]
-pub async fn logout() -> impl Responder {
+pub async fn logout(session: Session) -> impl Responder {
+    session.purge();
     HttpResponse::Ok().body("Logged out")
-}
-
-#[post("/register")]
-pub async fn register(body: web::Json<Credentials>, state: web::Data<AppState>) -> impl Responder {
-    let sqlite_pool = &state.app_db;
-    let user = sqlx::query_as::<_, Credentials>("SELECT * FROM users WHERE username = $1")
-        .bind(&body.username)
-        .fetch_one(sqlite_pool)
-        .await;
-    if let Ok(_) = user {
-        return HttpResponse::Ok().body("User already exists");
-    }
-    let user =
-        sqlx::query_as::<_, Credentials>("INSERT INTO users (username, password) VALUES ($1, $2)")
-            .bind(&body.username)
-            .bind(&body.password)
-            .fetch_one(sqlite_pool)
-            .await;
-    if let Ok(user) = user {
-        return HttpResponse::Ok().body(format!("Registered as {:#?}", user));
-    }
-    return HttpResponse::Ok().body("Failed to register");
 }

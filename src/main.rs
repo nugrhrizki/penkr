@@ -6,8 +6,8 @@ mod utils;
 use std::sync::Mutex;
 
 use actix_cors::Cors;
-use actix_files as fs;
-use actix_web::{get, middleware::Logger, web, App, HttpServer, Responder};
+use actix_session::{SessionMiddleware, storage::CookieSessionStore};
+use actix_web::{cookie::Key, middleware::Logger, web, App, HttpServer};
 
 use crate::core::db::DBX;
 use crate::utils::setup::{setup_app_db, setup_config};
@@ -16,11 +16,6 @@ use crate::utils::setup::{setup_app_db, setup_config};
 pub struct AppState {
     dbx: Mutex<Option<DBX>>,
     app_db: sqlx::SqlitePool,
-}
-
-#[get("/{tail:.*}")]
-async fn index() -> impl Responder {
-    fs::NamedFile::open("public/index.html")
 }
 
 #[actix_web::main]
@@ -40,15 +35,23 @@ async fn main() -> std::io::Result<()> {
 
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
 
+    let signing_key = Key::generate();
+
     HttpServer::new(move || {
         App::new()
-            .wrap(Cors::permissive())
             .wrap(Logger::default())
+            .wrap(SessionMiddleware::new(
+                CookieSessionStore::default(),
+                signing_key.clone(),
+            ))
             .app_data(app_state.clone())
             .service(web::scope("/pnkr").configure(app::init))
-            .service(web::scope("/api").configure(modules::restful::init))
-            .service(fs::Files::new("/public", "./public"))
-            .service(index)
+            .service(
+                web::scope("/api")
+                    .wrap(Cors::permissive())
+                    .configure(modules::restful::init),
+            )
+            .configure(modules::admin_panel::init)
     })
     .bind((config.server.host, config.server.port))?
     .run()
