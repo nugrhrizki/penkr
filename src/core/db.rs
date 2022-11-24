@@ -1,7 +1,10 @@
 use indexmap::IndexMap;
-use sqlx::{FromRow, Pool, Postgres, QueryBuilder, postgres::PgQueryResult};
+use sqlx::{postgres::PgQueryResult, Pool, Postgres, QueryBuilder};
 
-use crate::{core::de::QueryResult, utils::db::get_pg_pool};
+use crate::{
+    core::de::{Collection, QueryResult},
+    utils::db::get_pg_pool,
+};
 
 #[derive(Debug)]
 pub struct DBX {
@@ -327,11 +330,6 @@ pub struct DBXIntrospectBuilder {
     db_name: String,
 }
 
-#[derive(FromRow)]
-pub struct Collection {
-    pub table_name: String,
-}
-
 impl DBXIntrospectBuilder {
     fn new(pool: Pool<Postgres>) -> Self {
         Self {
@@ -346,19 +344,14 @@ impl DBXIntrospectBuilder {
     }
 
     pub async fn execute(&self) -> Result<Vec<Collection>, sqlx::Error> {
-        Ok(sqlx::query_as::<_, Collection>(
-            r#"
-            select
-                table_name
-            from information_schema.tables
-            where table_schema = 'public'
-            and table_type = 'BASE TABLE'
-            and table_catalog = $1
-            "#,
-        )
-        .bind(self.db_name.as_str())
-        .fetch_all(&self.pool)
-        .await?)
+        let introspect_sql = include_str!("../../sql/pg/introspect.sql");
+
+        let collections = sqlx::query_as::<_, Collection>(introspect_sql)
+            .bind(self.db_name.as_str())
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(collections)
     }
 }
 
@@ -373,8 +366,6 @@ impl DBXRawBuilder {
     }
 
     pub async fn execute(&self) -> Result<PgQueryResult, sqlx::Error> {
-        Ok(sqlx::query(self.query.as_str())
-            .execute(&self.pool)
-            .await?)
+        Ok(sqlx::query(self.query.as_str()).execute(&self.pool).await?)
     }
 }

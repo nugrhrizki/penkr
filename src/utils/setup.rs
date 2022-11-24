@@ -105,7 +105,8 @@ pub async fn setup_app_db() -> Result<Pool<Sqlite>, Box<dyn std::error::Error>> 
             r#"
             CREATE TABLE IF NOT EXISTS collections (
                 id	INTEGER PRIMARY KEY AUTOINCREMENT,
-                name	TEXT NOT NULL
+                name	TEXT NOT NULL,
+                columns TEXT NOT NULL
             );
             "#,
         )

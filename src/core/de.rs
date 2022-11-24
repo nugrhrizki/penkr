@@ -1,8 +1,10 @@
 use indexmap::IndexMap;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgRow, Column, FromRow, Row, TypeInfo};
 
-#[derive(Serialize)]
+use crate::utils::parse_expander::parse_introspect;
+
+#[derive(Serialize, Debug)]
 pub struct QueryResult(IndexMap<String, serde_json::Value>);
 
 impl FromRow<'_, PgRow> for QueryResult {
@@ -113,5 +115,34 @@ fn map_pg_column(name: &str, row: &PgRow, pg_type: &str) -> (String, serde_json:
                 serde_json::Value::String("not supported".into()),
             )
         }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Field {
+    pub name: String,
+    pub constraint: Option<String>,
+    pub ordinal_position: i32,
+    pub data_type: String,
+    pub char_max_len: Option<i32>,
+    pub numeric_precision: Option<i32>,
+    pub numeric_scale: Option<i32>,
+    pub is_nullable: bool,
+    pub is_unique: bool,
+    pub is_auto_increment: bool,
+    pub default_value: Option<String>,
+}
+
+pub struct Collection {
+    pub name: String,
+    pub fields: Vec<Field>,
+}
+
+impl FromRow<'_, PgRow> for Collection {
+    fn from_row(row: &PgRow) -> Result<Self, sqlx::Error> {
+        let name = row.try_get::<String, _>("collection")?;
+        let fields = row.try_get::<String, _>("fields")?;
+        let fields = parse_introspect(fields.as_str());
+        Ok(Collection { name, fields })
     }
 }
